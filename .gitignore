@@ -1,0 +1,5 @@
+.env
+credentials.json
+fetched_docs.json
+__pycache__/
+*.pyc
