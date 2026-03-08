@@ -105,11 +105,45 @@ HTML = """
     }
 
     .sources {
-      margin-top: 8px;
-      padding-top: 8px;
+      margin-top: 10px;
+      padding-top: 10px;
       border-top: 1px solid #dde3ea;
       font-size: 12px;
       color: #6680a0;
+    }
+
+    .sources-label {
+      font-size: 11px;
+      text-transform: uppercase;
+      letter-spacing: 0.05em;
+      color: #8aaccc;
+      margin-bottom: 6px;
+    }
+
+    .source-cards {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      margin-top: 4px;
+    }
+
+    .source-card {
+      display: inline-flex;
+      align-items: center;
+      gap: 5px;
+      background: white;
+      border: 1px solid #dde3ea;
+      border-radius: 6px;
+      padding: 4px 10px;
+      font-size: 11px;
+      color: #1c3557;
+      font-weight: 500;
+      white-space: nowrap;
+    }
+
+    .source-card .doc-icon {
+      font-size: 11px;
+      opacity: 0.6;
     }
 
     .input-area {
@@ -232,7 +266,25 @@ HTML = """
       if (sources && sources.length > 0) {
         const src = document.createElement('div');
         src.className = 'sources';
-        src.textContent = 'Sources: ' + sources.join(', ');
+
+        const label = document.createElement('div');
+        label.className = 'sources-label';
+        label.textContent = 'Sources';
+        src.appendChild(label);
+
+        const cards = document.createElement('div');
+        cards.className = 'source-cards';
+
+        sources.forEach(name => {
+          const card = document.createElement('div');
+          card.className = 'source-card';
+          // Clean up filename — remove underscores/hyphens, trim extensions
+          const clean = name.replace(/[-_]/g, ' ').replace(/\.[^.]+$/, '');
+          card.innerHTML = `<span class="doc-icon">📄</span>${clean}`;
+          cards.appendChild(card);
+        });
+
+        src.appendChild(cards);
         div.appendChild(src);
       }
 
@@ -280,6 +332,25 @@ HTML = """
 app = Flask(__name__)
 
 
+def expand_query(question):
+    """Rewrite the user's question to fix typos and expand synonyms for better retrieval."""
+    response = openai_client.chat.completions.create(
+        model=CHAT_MODEL,
+        max_tokens=100,
+        messages=[
+            {"role": "system", "content": (
+                "You are a search query optimizer for industrial material specifications. "
+                "Rewrite the user's question to fix any spelling errors and expand key terms "
+                "with technical synonyms (e.g. 'cold' → 'low temperature, sub-zero, cold'; "
+                "'sticky' → 'adhesion, bonding, tackiness'). "
+                "Return only the rewritten query — no explanation, no punctuation changes."
+            )},
+            {"role": "user", "content": question}
+        ]
+    )
+    return response.choices[0].message.content.strip()
+
+
 def embed(text):
     response = openai_client.embeddings.create(
         model=EMBED_MODEL,
@@ -301,7 +372,8 @@ def ask():
     if not question:
         return jsonify({"answer": "Please ask a question.", "sources": []})
 
-    vector  = embed(question)
+    expanded = expand_query(question)
+    vector  = embed(expanded)
     results = index.query(vector=vector, top_k=TOP_K, include_metadata=True)
 
     context_parts = []
